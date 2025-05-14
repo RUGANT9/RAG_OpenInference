@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Query Knowledge Base</title>
+</head>
+<body>
+    <h1>Ask a Question</h1>
+
+    <form id="queryForm">
+        <input type="text" id="queryInput" placeholder="Ask a question" required>
+        <button type="submit">Submit</button>
+    </form>
+
+    <h2>Answer:</h2>
+    <p id="answer"></p>
+
+    <script>
+        document.getElementById('queryForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            // Get the query from the input field
+            const query = document.getElementById('queryInput').value;
+
+            // Send a POST request to the /query endpoint with the query
+            const response = await fetch('/query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ query: query })
+            });
+
+            const result = await response.json();
+
+            // Display the result in the 'answer' paragraph
+            if (response.ok) {
+                document.getElementById('answer').innerText = result.answer;
+            } else {
+                document.getElementById('answer').innerText = "Error: " + result.error;
+            }
+        });
+    </script>
+</body>
+</html>
