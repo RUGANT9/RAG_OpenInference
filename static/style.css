@@ -1,0 +1,28 @@
+body{
+    background-color: rgb(40, 56, 56);
+    text-align: center;
+    color: azure;
+}
+
+#queryInput {
+    width: 500px;       /* Adjust width */
+    height: 40px;       /* Adjust height */
+    font-size: 16px;    /* Make text inside bigger */
+    padding: 10px;      /* Add internal spacing */
+}
+
+#submitBtn {
+    background-color: #4CAF50;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 25px; /* rounded edges */
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  
+  #submitBtn:hover {
+    background-color: #45a049;
+  }
+
