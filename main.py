@@ -7,6 +7,17 @@ from langchain.schema import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.llms import LlamaCpp
 import os
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor, ConsoleSpanExporter
+
+# Set up OpenTelemetry
+trace.set_tracer_provider(TracerProvider())
+tracer = trace.get_tracer(__name__)
+
+# Set up Console Exporter to print spans to console
+span_processor = SimpleSpanProcessor(ConsoleSpanExporter())
+trace.get_tracer_provider().add_span_processor(span_processor)
 
 app = Flask(__name__)
 
@@ -16,38 +27,41 @@ faiss_index = None
 
 def create_faiss_index():
     global faiss_index
-    # URL of the Wikipedia page on cars
-    url = "https://en.wikipedia.org/wiki/Car"
 
-    # Send a GET request to fetch the raw HTML content
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    # Start a trace for the FAISS index creation process
+    with tracer.start_as_current_span("create_faiss_index"):
+        # URL of the Wikipedia page on cars
+        url = "https://en.wikipedia.org/wiki/Car"
 
-    # Extract the main content of the page
-    content = soup.find('div', {'class': 'mw-parser-output'})
+        # Send a GET request to fetch the raw HTML content
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-    # Extract all paragraphs
-    paragraphs = content.find_all('p')
+        # Extract the main content of the page
+        content = soup.find('div', {'class': 'mw-parser-output'})
 
-    # Combine paragraphs into a single text
-    car_info = "\n".join([para.get_text() for para in paragraphs])
+        # Extract all paragraphs
+        paragraphs = content.find_all('p')
 
-    # Split the car_info into chunks (e.g., sentences)
-    car_info_chunks = car_info.split('\n')
+        # Combine paragraphs into a single text
+        car_info = "\n".join([para.get_text() for para in paragraphs])
 
-    # Wrap the model with LangChain's SentenceTransformerEmbedding
-    embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        # Split the car_info into chunks (e.g., sentences)
+        car_info_chunks = car_info.split('\n')
 
-    # Convert the text chunks into LangChain Document objects
-    documents = [Document(page_content=chunk) for chunk in car_info_chunks]
+        # Wrap the model with LangChain's SentenceTransformerEmbedding
+        embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-    # Create a FAISS Vectorstore using LangChain's FAISS wrapper
-    if not os.path.exists(index_dir):
-        os.makedirs(index_dir)
-    
-    faiss_index = FAISS.from_documents(documents, embedding_model)
-    faiss_index.save_local(index_dir)
-    print("FAISS index created and saved.")
+        # Convert the text chunks into LangChain Document objects
+        documents = [Document(page_content=chunk) for chunk in car_info_chunks]
+
+        # Create a FAISS Vectorstore using LangChain's FAISS wrapper
+        if not os.path.exists(index_dir):
+            os.makedirs(index_dir)
+
+        faiss_index = FAISS.from_documents(documents, embedding_model)
+        faiss_index.save_local(index_dir)
+        print("FAISS index created and saved.")
 
 # Call this function once when the app starts
 create_faiss_index()
@@ -81,9 +95,11 @@ def query_knowledge_base():
     if not query:
         return jsonify({"error": "No query provided"}), 400
     
-    # Run the QA chain to get the answer
-    response = qa_chain.run(query)
-    return jsonify({"answer": response})
+    # Start a trace for query processing
+    with tracer.start_as_current_span("query_knowledge_base"):
+        # Run the QA chain to get the answer
+        response = qa_chain.run(query)
+        return jsonify({"answer": response})
 
 if __name__ == "__main__":
     app.run(debug=True)
