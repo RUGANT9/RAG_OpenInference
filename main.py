@@ -31,20 +31,21 @@ def create_faiss_index():
     # Start a trace for the FAISS index creation process
     with tracer.start_as_current_span("create_faiss_index"):
         # URL of the Wikipedia page on cars
-        url = "https://en.wikipedia.org/wiki/Car"
+        urls = ["https://en.wikipedia.org/wiki/Car", "https://en.wikipedia.org/wiki/Airplane", "https://en.wikipedia.org/wiki/Train", "https://en.wikipedia.org/wiki/Spacecraft", "https://en.wikipedia.org/wiki/Ship", "https://en.wikipedia.org/wiki/Transport", "https://en.wikipedia.org/wiki/Tiger", "https://en.wikipedia.org/wiki/Breaking_Bad"]
+        car_info = ''
+        for url in urls:
+            # Send a GET request to fetch the raw HTML content
+            response = requests.get(url)
+            soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Send a GET request to fetch the raw HTML content
-        response = requests.get(url)
-        soup = BeautifulSoup(response.text, 'html.parser')
+            # Extract the main content of the page
+            content = soup.find('div', {'class': 'mw-parser-output'})
 
-        # Extract the main content of the page
-        content = soup.find('div', {'class': 'mw-parser-output'})
+            # Extract all paragraphs
+            paragraphs = content.find_all('p')
 
-        # Extract all paragraphs
-        paragraphs = content.find_all('p')
-
-        # Combine paragraphs into a single text
-        car_info = "\n".join([para.get_text() for para in paragraphs])
+            # Combine paragraphs into a single text
+            car_info += "\n".join([para.get_text() for para in paragraphs])
 
         # Split the car_info into chunks (e.g., sentences)
         car_info_chunks = car_info.split('\n')
@@ -66,6 +67,21 @@ def create_faiss_index():
 # Call this function once when the app starts
 create_faiss_index()
 
+INTENT_KEYWORDS = {
+    "cars": ["car", "automobile", "engine", "road", "vehicle"],
+    "ships": ["ship", "marine", "boat", "vessel", "sail"],
+    "aircraft": ["aircraft", "plane", "aviation", "jet", "airport"],
+    "trains": ["train", "railway", "locomotive", "track"],
+    "spacecraft": ["spacecraft", "rocket", "orbit", "nasa", "launch"]
+}
+
+def detect_intent(query):
+    query_lower = query.lower()
+    for intent, keywords in INTENT_KEYWORDS.items():
+        if any(kw in query_lower for kw in keywords):
+            return intent
+    return "general"  # fallback
+
 # Initialize the LLM for QA
 model_path = "./models/mistral-7b-instruct-v0.1.Q4_K_M.gguf"
 llm = LlamaCpp(
@@ -73,15 +89,18 @@ llm = LlamaCpp(
     n_ctx=2048,
     temperature=0.7,
     max_tokens=512,
-    top_p=0.95,
+    top_p=0.6,
     verbose=True,
 )
 
-qa_chain = RetrievalQA.from_chain_type(
-    llm=llm,
-    retriever=faiss_index.as_retriever(),
-    chain_type="stuff"
-)
+def get_response(query):
+    intent = detect_intent(query)
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=llm,
+        retriever=faiss_index.as_retriever(search_kwargs={"filter": {"domain": intent}}),
+        chain_type="stuff"
+    )
+    return qa_chain.run(query)
 
 # API endpoint to handle queries
 # Serve the HTML page on root route
@@ -98,7 +117,7 @@ def query_knowledge_base():
     # Start a trace for query processing
     with tracer.start_as_current_span("query_knowledge_base"):
         # Run the QA chain to get the answer
-        response = qa_chain.run(query)
+        response = get_response(query=query)
         return jsonify({"answer": response})
 
 if __name__ == "__main__":
