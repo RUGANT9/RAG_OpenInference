@@ -1,0 +1,12 @@
+flask
+bs4
+requests
+faiss-cpu
+sentence-transformers
+langchain
+langchain-community
+langchain-core
+langchain-huggingface
+llama-cpp-python
+sentence-transformers
+flask-cors
